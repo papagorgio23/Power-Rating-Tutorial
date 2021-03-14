@@ -76,6 +76,7 @@ like
 # code
 ```
 
+## Prep Data
 
 ### Load Libraries
 
@@ -91,7 +92,7 @@ library("tidyverse")
 
 ### Load Data
 
-```{r load-data}
+```{r load-data, layout="l-page", cache=TRUE}
 # Connect to data
 con <-
   url("https://github.com/leesharpe/nfldata/blob/master/data/games.rds?raw=true")
@@ -99,15 +100,17 @@ nfl_games <- readRDS(con)
 close(con)
 
 # view data
-head(nfl_games)
+datatable(slice_sample(nfl_games, n = 100))
 ```
 
 This dataset goes back to 1999 but we are only concerned about the 2020 season. We can use the `filter()` function to trim our dataset to what we need. Personally, I'm used to looking at Vegas spreads in relation to the home team. The lines in this dataset are the road lines. So let's transform this real quick by multiplying by -1. 
 
-```{r season}
+```{r season, layout="l-page"}
 nfl_2020 <- nfl_games %>% 
   filter(season == 2020) %>% 
-  mutate(spread_line = spread_line * -1)
+  mutate(spread_line = spread_line * -1) 
+
+datatable(slice_sample(nfl_2020, n = 100))
 ```
 
 
@@ -206,15 +209,17 @@ model_data <- bind_rows(
   neutral2
 )
 
-datatable(model_data)
+datatable(slice_sample(model_data, n = 100))
 ```
 
 While we're at it, lets save the playoff games for later when we're actually using our power numbers.
 
-```{r playoffs}
+```{r playoffs, layout="l-page"}
 # We will use our Power numbers to predict the playoffs
 playoffs <- nfl_2020 %>%
   filter(game_type != "REG")
+
+datatable(playoffs)
 ```
 
 
@@ -285,14 +290,13 @@ new_data <- update_model_data(
   new_games = playoffs
 )
 
-kable(head(new_data, 10))
-kable(tail(new_data, 10))
+datatable(new_data)
 ```
 
 This works perfectly as we can see the playoff games are attached at the bottom.
 
 
-### Linear Regression
+## Linear Regression
 
 
 The goal of this model is to find the best power number for each team using the result of each of their games. This will take into account the location of the game and their opponent. This approach will try to minimize the squared error between the prediction and the result. This does cause some issues when there are large outliers. For example, Kansas City Chiefs in week 17 were favored to win by 7 points but ended up losing by 17 making it a 24 point error, 576 point error when squared in the algorithm. This will severely punish the overall number that KC is assigned. 
@@ -310,7 +314,7 @@ summary(lm_fit)
 plot(lm_fit)
 ```
 
-### Power Numbers
+## Power Numbers
 
 Our power numbers are normalized with 0 being equivalent to an "average" team. Positive numbers are better and negative numbers are bad. Looking at the results below, the Saints heading into the playoffs are the highest rated team at 9.66 meaning they would be expected to beat an average team in a neutral location by 9.66 points. The Jaguars and Jets are the worst teams both expected to lose by 11ish points to an average team at a neutral site. 
 
@@ -404,7 +408,7 @@ datatable(update_ratings(model_data = new_data))
 
 
 
-### Predictions
+## Predictions
 
 ```{r predictions}
 ## predictions
@@ -446,7 +450,7 @@ Now it's time to pretend..Or in the sports betting world it's called backtesting
 *Super* Wild Card Weekend this year showcased 6 total games. Let's look at the teams and vegas lines.
 
 
-```{r wildcard}
+```{r wildcard, layout="l-page"}
 playoffs %>%
   filter(game_type == "WC") %>% 
   select(home_team, away_team, spread_line, total_line) %>% 
@@ -508,7 +512,7 @@ bet_games <-
 
 
 
-```{r wildcard-bet}
+```{r wildcard-bet, layout="l-page"}
 wild_card <- playoffs %>%
   filter(game_type == "WC") %>%
   bet_games(games = .,
@@ -537,11 +541,12 @@ more_games <- update_model_data(
 
 ```{r update-div-num}
 new_rankings <- update_ratings(model_data = more_games)
+datatable(new_rankings)
 ```
 
 
 
-```{r division}
+```{r division, layout="l-page"}
 division <- playoffs %>%
   filter(game_type == "DIV") %>%
   bet_games(games = .,
@@ -569,11 +574,12 @@ more_games <- update_model_data(
 
 ```{r update-conf-num}
 new_rankings <- update_ratings(model_data = more_games)
+datatable(new_rankings)
 ```
 
 
 
-```{r conf-bet}
+```{r conf-bet, layout="l-page"}
 conf_champ <- playoffs %>%
   filter(game_type == "CON") %>%
   bet_games(games = .,
@@ -602,11 +608,12 @@ more_games <- update_model_data(
 
 ```{r update-super-num}
 new_rankings <- update_ratings(model_data = more_games)
+datatable(new_rankings)
 ```
 
 
 
-```{r super-bet}
+```{r super-bet, layout="l-page"}
 super <- playoffs %>%
   filter(game_type == "SB") %>%
   bet_games(games = .,
@@ -637,20 +644,28 @@ all_games <- update_model_data(
 
 ```{r final-num}
 final_rankings <- update_ratings(model_data = all_games)
-final_rankings
+datatable(final_rankings)
 ```
 
 
 I'm sure you noticed that Kansas City is still very low on the list compared to what everyone thought of them going into the Super Bowl. This methodology is heavily influenced by outliers. The Chiefs had 2 really bad home games where they underperformed by a substantial margin. When they faced off against the raiders on Oct. 11th, they were 11 point favorites and our model had them at only a 8.8 point favorite. However, they lost by 8 points making it a 19 and 16.8 point under performance with the spread and model, respectively. Then again on week 17 against the Chargers they were 7 point favorites and lost by 17. This game didn't matter for them. Because this game didn't matter to them it is a perfect example of the type of game that you should filter out before you train your model. If you keep it in then you'll have KC as the 6th ranked team in the NFL. 
 
 
-```{r kc-games}
+```{r kc-games, layout="l-page"}
 all_games %>% 
-  filter(Team == "KC") %>% 
   mutate(Under_Perform = Point_Diff - pred_score) %>% 
   filter(Under_Perform < -15) %>% 
-  kable()
+  arrange(Under_Perform) %>% 
+  datatable()
 ```
+
+
+
+## Final Thoughts
+
+As previously stated, this is just one of the many ways you can create NFL Power Numbers to help find an edge in the sports betting markets. There is plenty of room to adjust manually for additional factors that are not included in the model. 
+
+Outliers heavily impact the performance of this approach. Feel free to trim down the points of certain games. Or if you use the play-by-play data provided by the `{nflfastR}` package, you can filter out garage time points. 
 
 
 
