@@ -52,7 +52,7 @@ For this example, we will just use a home field edge as +2. If the game were pla
 
 For each game we have the function
 
-$$(Home\ Edge) + (Home\ Team\ Rating) - (Away\ Team\ Ratings) = Predicted\ Line$$
+$$(Home\ Team\ Rating) + (Home\ Edge) - (Away\ Team\ Ratings) = Predicted\ Line$$
 
 
 
@@ -78,7 +78,10 @@ like
 
 ## Prep Data
 
+
 ### Load Libraries
+
+First, we need to load the required packages for this project.
 
 ```{r libs}
 # load libraries
@@ -92,25 +95,46 @@ library("tidyverse")
 
 ### Load Data
 
-```{r load-data, layout="l-page", cache=TRUE}
+Next, we will use the NFL games data from Lee Sharpe. We can connect to his raw file on github and use the `readRDS()` function to load it in memory.
+
+```{r load-data, cache=TRUE}
 # Connect to data
 con <-
   url("https://github.com/leesharpe/nfldata/blob/master/data/games.rds?raw=true")
 nfl_games <- readRDS(con)
 close(con)
-
-# view data
-datatable(slice_sample(nfl_games, n = 100))
 ```
+
+
+
+```{r nfl-games echo=FALSE}
+# view a random subset of the data
+datatable(
+  slice_sample(nfl_games, n = 100), 
+  extensions = 'FixedColumns',
+  options = list(
+    scrollX = TRUE
+  )
+)
+```
+
+
 
 This dataset goes back to 1999 but we are only concerned about the 2020 season. We can use the `filter()` function to trim our dataset to what we need. Personally, I'm used to looking at Vegas spreads in relation to the home team. The lines in this dataset are the road lines. So let's transform this real quick by multiplying by -1. 
 
-```{r season, layout="l-page"}
+```{r season}
 nfl_2020 <- nfl_games %>% 
   filter(season == 2020) %>% 
   mutate(spread_line = spread_line * -1) 
 
-datatable(slice_sample(nfl_2020, n = 100))
+# view a random subset of the data
+datatable(
+  slice_sample(nfl_2020, n = 100), 
+  extensions = 'FixedColumns',
+  options = list(
+    scrollX = TRUE
+  )
+)
 ```
 
 
@@ -146,8 +170,6 @@ home <- nfl_2020 %>%
          Team = home_team, 
          Opp = away_team) %>% 
   mutate(Location = "Home") 
-
-
 datatable(home)
 ```
 
@@ -165,7 +187,6 @@ road <- nfl_2020 %>%
          Opp = home_team) %>% 
   mutate(Location = "Road",
          Point_Diff = Point_Diff * -1) 
-
 datatable(road)
 ```
 
@@ -183,7 +204,6 @@ neutral1 <- nfl_2020 %>%
          Team = home_team, 
          Opp = away_team) %>% 
   mutate(Location = "Neutral") 
-
 neutral2 <- nfl_2020 %>%
   filter(game_type == "REG",
          location != "Home") %>%
@@ -208,7 +228,6 @@ model_data <- bind_rows(
   neutral1,
   neutral2
 )
-
 datatable(slice_sample(model_data, n = 100))
 ```
 
@@ -218,7 +237,6 @@ While we're at it, lets save the playoff games for later when we're actually usi
 # We will use our Power numbers to predict the playoffs
 playoffs <- nfl_2020 %>%
   filter(game_type != "REG")
-
 datatable(playoffs)
 ```
 
@@ -289,7 +307,6 @@ new_data <- update_model_data(
   model_data = model_data, 
   new_games = playoffs
 )
-
 datatable(new_data)
 ```
 
@@ -332,7 +349,6 @@ There are some very important steps now. First, we need to determine a baseline 
 ```{r rankings}
 # scale with average team = 0
 scale_factor <- mean(lm_fit$coefficients[2:32])
-
 ## Get Team Ratings and Rank
 rankings <- data.frame("Team" = sort(unique(model_data$Team)),
                        "Rating" = rep(NA, 32)) %>%
@@ -340,16 +356,14 @@ rankings <- data.frame("Team" = sort(unique(model_data$Team)),
          Rank = rank(-Rating)) %>%
   select(Rank, Team, Rating) %>%
   arrange(Rank)
-
 datatable(rankings)
 ```
 
 
-```{r plot-ranking, layout="l-page", fig.height=5, preview=TRUE}
+```{r plot-ranking, layout="l-page", fig.height=5}
 logos <- nflfastR::teams_colors_logos %>% 
   select(team_abbr, team_color, team_logo_wikipedia)
 asp_ratio <- 1.618
-
 rankings %>%
   left_join(logos, by = c("Team" = "team_abbr")) %>% 
   ggplot(aes(x = Rating, y = reorder(Team, Rating))) +
@@ -400,8 +414,6 @@ update_ratings <- function(model_data) {
   
   return(rankings)
 }
-
-
 datatable(update_ratings(model_data = new_data))
 ```
 
@@ -414,14 +426,11 @@ datatable(update_ratings(model_data = new_data))
 ## predictions
 model_data$pred_score <- predict(lm_fit, newdata = model_data)
 model_data$win <- ifelse(model_data$Point_Diff > 0, 1, 0)
-
 # logistic regression to get win probability
 glm_pointspread <-
   glm(win ~ pred_score, data = model_data, family = "binomial")
 model_data$win_prob <-
   predict(glm_pointspread, newdata = model_data, type = "response")
-
-
 ## Plot results
 ggplot(data = model_data, aes(x = pred_score, y = win_prob, color = factor(win))) +
   geom_point() +
@@ -506,7 +515,6 @@ bet_games <-
     
     return(results)
   }
-
 ```
 
 
@@ -519,7 +527,6 @@ wild_card <- playoffs %>%
             rankings = rankings,
             threshold = 0.5,
             home_edge = 1.5)
-
 datatable(wild_card)
 ```
 
@@ -553,7 +560,6 @@ division <- playoffs %>%
             rankings = new_rankings,
             threshold = 0.5,
             home_edge = 1.5)
-
 datatable(division)
 ```
 
@@ -586,7 +592,6 @@ conf_champ <- playoffs %>%
             rankings = new_rankings,
             threshold = 0.5,
             home_edge = 0.5)
-
 datatable(conf_champ)
 ```
 
@@ -620,7 +625,6 @@ super <- playoffs %>%
             rankings = new_rankings,
             threshold = 0.5,
             home_edge = 0.5)
-
 datatable(super)
 ```
 
@@ -646,6 +650,41 @@ all_games <- update_model_data(
 final_rankings <- update_ratings(model_data = all_games)
 datatable(final_rankings)
 ```
+
+
+
+
+```{r final-plot, layout="l-page", fig.height=5, preview=TRUE}
+logos <- nflfastR::teams_colors_logos %>% 
+  select(team_abbr, team_color, team_logo_wikipedia)
+asp_ratio <- 1.618
+final_rankings %>%
+  left_join(logos, by = c("Team" = "team_abbr")) %>% 
+  ggplot(aes(x = Rating, y = reorder(Team, Rating))) +
+  geom_col(aes(fill = team_color, color = team_color), alpha = 0.7) +
+  geom_image(
+    aes(image = team_logo_wikipedia), 
+    size = 0.035, 
+    by = "width", 
+    asp = asp_ratio
+  ) +
+  scale_fill_identity(aesthetics = c("fill", "colour")) +
+  theme_bw() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    axis.text.y = element_blank()) +
+  geom_hline(yintercept = 0) +
+  scale_x_continuous(breaks = seq(-12, 12, 2)) +
+  labs(
+    x = "Points Better (Worse) vs. Average Team",
+    y = "",
+    title = "NFL Power Numbers",
+    subtitle = "2020 Season",
+    caption = "Jason Lee  |  @theFirmAISports"
+  )
+```
+
+
 
 
 I'm sure you noticed that Kansas City is still very low on the list compared to what everyone thought of them going into the Super Bowl. This methodology is heavily influenced by outliers. The Chiefs had 2 really bad home games where they underperformed by a substantial margin. When they faced off against the raiders on Oct. 11th, they were 11 point favorites and our model had them at only a 8.8 point favorite. However, they lost by 8 points making it a 19 and 16.8 point under performance with the spread and model, respectively. Then again on week 17 against the Chargers they were 7 point favorites and lost by 17. This game didn't matter for them. Because this game didn't matter to them it is a perfect example of the type of game that you should filter out before you train your model. If you keep it in then you'll have KC as the 6th ranked team in the NFL. 
