@@ -64,17 +64,16 @@ Let’s walk through exactly how to set these ratings using the 2020 season in R
 The issue with this method is that outliers affect the overall ratings significantly. A single bad game can impact all the other ratings.
 
 
+In this tutorial, you will get to see first hand how NFL Power Numbers are used by sports bettors. You will create your own Power Numbers using the 2020 regular season and use them to predict each round of the playoffs. Each round you will update your numbers and use them to predict the next round until the Super Bowl showdown between Tom Brady and Patrick Mahomes.
 
-```{r, layout="l-page", fig.height=4.4}
-# code
-```
 
-If you want to use a plot as preview of your post, just add the option `preview=TRUE`
-like
+After completing this tutorial, you will know:
 
-```{r, layout="l-page", fig.height=4.4, preview=TRUE}
-# code
-```
+- How to transform data into a workable format for modeling.
+- How to create functions to help workflows.
+- How to create your own NFL Power Numbers.
+- How to use NFL Power Numbers.
+
 
 ## Prep Data
 
@@ -107,7 +106,7 @@ close(con)
 
 
 
-```{r nfl-games echo=FALSE}
+```{r nfl-games, echo=FALSE}
 # view a random subset of the data
 datatable(
   slice_sample(nfl_games, n = 100), 
@@ -126,7 +125,11 @@ This dataset goes back to 1999 but we are only concerned about the 2020 season. 
 nfl_2020 <- nfl_games %>% 
   filter(season == 2020) %>% 
   mutate(spread_line = spread_line * -1) 
+```
 
+
+
+```{r season-data, echo=FALSE}
 # view a random subset of the data
 datatable(
   slice_sample(nfl_2020, n = 100), 
@@ -170,7 +173,8 @@ home <- nfl_2020 %>%
          Team = home_team, 
          Opp = away_team) %>% 
   mutate(Location = "Home") 
-datatable(home)
+
+head(home)
 ```
 
 
@@ -187,7 +191,8 @@ road <- nfl_2020 %>%
          Opp = home_team) %>% 
   mutate(Location = "Road",
          Point_Diff = Point_Diff * -1) 
-datatable(road)
+
+head(road)
 ```
 
 
@@ -233,13 +238,23 @@ datatable(slice_sample(model_data, n = 100))
 
 While we're at it, lets save the playoff games for later when we're actually using our power numbers.
 
-```{r playoffs, layout="l-page"}
+```{r playoffs}
 # We will use our Power numbers to predict the playoffs
 playoffs <- nfl_2020 %>%
   filter(game_type != "REG")
-datatable(playoffs)
 ```
 
+
+```{r playoff-data, echo=FALSE}
+# view a random subset of the data
+datatable(
+  slice_sample(playoffs, n = 100), 
+  extensions = 'FixedColumns',
+  options = list(
+    scrollX = TRUE
+  )
+)
+```
 
 
 During the actual season, there will be weekly games added to our dataset that we will need to organize in this same manner. Let's wrap this into a function to make our life 100x easier in the future. This function will need two inputs: first, the previous model dataset (`model_data`), second, the most recently played games (`new_games`).
