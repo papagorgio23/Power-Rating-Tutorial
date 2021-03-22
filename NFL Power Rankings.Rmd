@@ -78,13 +78,16 @@ After completing this tutorial, you will know:
 ## Prep Data
 
 
+The data format needed for this particular approach will be a dataframe with every single game played for each team (16 games for 32 teams = 512 total games). We will use the team, opponent, and location (Home, Road, Neutral) as inputs in the model with a dependent variable as the final margin of victory (MOV). Each individual game will be in the final dataset twice with the home team and road team occupying their own row. This is a very basic model with few inputs so it shouldn't be hard to compile.
+
+
 ### Load Libraries
 
-First, we need to load the required packages for this project.
+First, we need to load the required packages for this project. We'll use the `{bettoR}` package from A.I. Sports to help us understand our edge in each game.
 
 ```{r libs}
 # load libraries
-library("knitr")
+library("bettoR")
 library("DT")
 library("ggimage")
 library("nflfastR")
@@ -94,7 +97,7 @@ library("tidyverse")
 
 ### Load Data
 
-Next, we will use the NFL games data from Lee Sharpe. We can connect to his raw file on github and use the `readRDS()` function to load it in memory.
+Next, we will use the NFL games data from Lee Sharpe. He maintains a clean open source dataset for everyone to enjoy (Thank you!). We can connect to his raw file on github and use the `readRDS()` function to load it in memory.
 
 ```{r load-data, cache=TRUE}
 # Connect to data
@@ -119,12 +122,12 @@ datatable(
 
 
 
-This dataset goes back to 1999 but we are only concerned about the 2020 season. We can use the `filter()` function to trim our dataset to what we need. Personally, I'm used to looking at Vegas spreads in relation to the home team. The lines in this dataset are the road lines. So let's transform this real quick by multiplying by -1. 
+As you can see, this dataset goes back to 1999 but we are only concerned with the 2020 season. We can use the `filter()` function to trim our dataset to what we need. Personally, I'm used to looking at Vegas spreads in relation to the home team. The lines in this dataset are the road lines. So let's transform this real quick with the `mutate()` function by multiplying by -1 to give us the home_line. 
 
 ```{r season}
 nfl_2020 <- nfl_games %>% 
   filter(season == 2020) %>% 
-  mutate(spread_line = spread_line * -1) 
+  mutate(home_line = spread_line * -1) 
 ```
 
 
@@ -144,21 +147,18 @@ datatable(
 ### Transform Data
 
 
-The next step requires us to transform the data in preparation for modeling. We will start by getting all of the home games together
-
-We need to get the Point differential, Team
-
-Our dependent variable with be the final margin of victory (point differential). Then we need to know the team, opponent, and location (Home, Road, or Neutral). Each game will be in the final dataset twice with the home team and road team occupying their own row. 
-
-
-The dataset has a location column that tells us whether or not the game was played on a neutral field. These games we will handle 
+The next step requires us to transform the data in preparation for modeling. Since this dataset has 1 row per game with a home and away team, we need to rearrange things a little bit. One important note here, there is a location column that tells us whether or not the game was played on a neutral field. Even though there is a home and away team for every road, this location flag let's us know if the game was actually played at the home team's stadium. 
 
 ```{r neutral}
 table(nfl_2020$location)
 ```
 
+There are only 4 games that were played on a neutral field this season. We can handle this games last.
 
-We can start with the home teams. We will `filter()` to the regular season games with `game_time == "REG"` and also remove the 4 neutral games by including `location == "Home"`. It is good practice to keep the datasets as small as possible so we will only return the game result, home team, and away team. We will rename the result column to `Point_Diff`, `home_team` to `Team`, and `away_team` to `Opp`. Finally, we will tag all of these games with the `Location` as `Home`.
+
+#### Home Games
+
+We will start by getting all of the home games together. We will `filter()` to the regular season games with `game_time == "REG"` and also remove the 4 neutral games by including `location == "Home"`. It is good practice to keep the datasets as small as possible so we will only return the needed columns: game result, home team, and away team. We will rename the result column to `MOV`, `home_team` to `Team`, and `away_team` to `Opp`. Finally, we will tag all of these games with the `Location` as `Home` using the `mutate()` function again.
 
 
 
@@ -169,7 +169,7 @@ home <- nfl_2020 %>%
   filter(game_type == "REG",
          location == "Home") %>%
   select(result, home_team, away_team) %>%
-  rename(Point_Diff = result,
+  rename(MOV = result,
          Team = home_team, 
          Opp = away_team) %>% 
   mutate(Location = "Home") 
@@ -177,25 +177,27 @@ home <- nfl_2020 %>%
 head(home)
 ```
 
+#### Road Games
 
-Now we can do the same thing for the road games with some slight changes. The `away_team` becomes `Team` and `home_team` becomes the `Opp`. The `Location` changes to `Road`. Finally, the point differential is geared towards the home team so we need to flip it around by multiplying by -1.
+Now we can do the same thing for the road games with some slight changes. The `away_team` becomes `Team` and `home_team` becomes the `Opp`. The `Location` changes to `Road`. Finally, the margin of victory is geared towards the home team so we need to flip it around by multiplying by -1.
 
 
 ```{r road}
 road <- nfl_2020 %>%
   filter(game_type == "REG",
          location == "Home") %>%
-  select(result, home_team, away_team) %>%
-  rename(Point_Diff = result,
+  select(result, away_team, home_team) %>%
+  rename(MOV = result,
          Team = away_team,
          Opp = home_team) %>% 
   mutate(Location = "Road",
-         Point_Diff = Point_Diff * -1) 
+         MOV = MOV * -1) 
 
 head(road)
 ```
 
 
+#### Neutral Games
 
 Now we need to handle the four neutral site games. We will do the same thing as above to keep the dataset balanced. To get these games we change the location to NOT equal Home (`Location != "Home"`) or we can set it equal to `"Neutral"`. Either way works just fine in this situation.
 
@@ -203,26 +205,31 @@ Now we need to handle the four neutral site games. We will do the same thing as 
 ```{r neither}
 neutral1 <- nfl_2020 %>%
   filter(game_type == "REG",
-         location != "Home") %>%
+         location == "Neutral") %>%
   select(result, home_team, away_team) %>%
-  rename(Point_Diff = result,
+  rename(MOV = result,
          Team = home_team, 
          Opp = away_team) %>% 
   mutate(Location = "Neutral") 
 neutral2 <- nfl_2020 %>%
   filter(game_type == "REG",
-         location != "Home") %>%
-  select(result, home_team, away_team) %>%
-  rename(Point_Diff = result,
+         location == "Neutral") %>%
+  select(result, away_team, home_team) %>%
+  rename(MOV = result,
          Team = away_team,
          Opp = home_team) %>% 
   mutate(Location = "Neutral",
-         Point_Diff = Point_Diff * -1) 
+         MOV = MOV * -1) 
+
+head(neutral1)
+head(neutral2)
 ```
 
 
+#### Model Dataset
 
-Now we will combine all of these dataframes together with the `bind_rows()` function to give us our final dataset containing 512 games, 16 games for 32 teams.
+
+Finally, we will combine all of these dataframes together with the `bind_rows()` function to give us our final dataset containing 512 games, 16 games for 32 teams.
 
  
 ```{r all-data}
@@ -233,10 +240,27 @@ model_data <- bind_rows(
   neutral1,
   neutral2
 )
-datatable(slice_sample(model_data, n = 100))
 ```
 
-While we're at it, lets save the playoff games for later when we're actually using our power numbers.
+
+
+
+```{r all-data-view, echo=FALSE}
+# view a random subset of the data
+datatable(
+  slice_sample(model_data, n = 100), 
+  extensions = 'FixedColumns',
+  options = list(
+    scrollX = TRUE
+  )
+)
+```
+
+
+#### Testing Dataset (Playoffs)
+
+
+While we're at it, let's save the playoff games for later when we're actually using our power numbers. 
 
 ```{r playoffs}
 # We will use our Power numbers to predict the playoffs
@@ -256,8 +280,9 @@ datatable(
 )
 ```
 
+#### Transform Data Function
 
-During the actual season, there will be weekly games added to our dataset that we will need to organize in this same manner. Let's wrap this into a function to make our life 100x easier in the future. This function will need two inputs: first, the previous model dataset (`model_data`), second, the most recently played games (`new_games`).
+During the actual season, there will be weekly games added to our dataset that we will need to organize in this exact same manner. Let's wrap this whole process into a single function to make our life 100x easier in the future. This function will need two inputs: first, the previous model dataset (`model_data`), second, the most recently played games (`new_games`).
 
 
 
@@ -265,40 +290,41 @@ During the actual season, there will be weekly games added to our dataset that w
 ## Function to update data
 update_model_data <- function(model_data, new_games) {
   
-  
+  # home games
   home <- new_games %>%
     filter(location == "Home") %>%
     select(result, home_team, away_team) %>%
-    rename(Point_Diff = result,
+    rename(MOV = result,
            Team = home_team, 
            Opp = away_team) %>% 
     mutate(Location = "Home") 
   
+  # road games
   road <- new_games %>%
     filter(location == "Home") %>%
     select(result, home_team, away_team) %>%
-    rename(Point_Diff = result,
+    rename(MOV = result,
            Team = away_team,
            Opp = home_team) %>% 
     mutate(Location = "Road",
-           Point_Diff = Point_Diff * -1) 
+           MOV = MOV * -1) 
   
+  # neutral games
   neutral1 <- new_games %>%
     filter(location != "Home") %>%
     select(result, home_team, away_team) %>%
-    rename(Point_Diff = result,
+    rename(MOV = result,
            Team = home_team, 
            Opp = away_team) %>% 
     mutate(Location = "Neutral") 
-  
   neutral2 <- new_games %>%
     filter(location != "Home") %>%
     select(result, home_team, away_team) %>%
-    rename(Point_Diff = result,
+    rename(MOV = result,
            Team = away_team,
            Opp = home_team) %>% 
     mutate(Location = "Neutral",
-           Point_Diff = Point_Diff * -1) 
+           MOV = MOV * -1) 
   
   
   # combine data
@@ -315,20 +341,24 @@ update_model_data <- function(model_data, new_games) {
 ```
 
 
-Let's make sure this function works. We can use the model_data and our playoff games.
+Let's make sure this function works. We can use the `model_data` and our `playoffs` as the `new_games`. 
 
 ```{r full-data}
 new_data <- update_model_data(
   model_data = model_data, 
   new_games = playoffs
 )
+
 datatable(new_data)
 ```
 
 This works perfectly as we can see the playoff games are attached at the bottom.
 
+## Power Numbers
 
-## Linear Regression
+
+
+### Linear Regression
 
 
 The goal of this model is to find the best power number for each team using the result of each of their games. This will take into account the location of the game and their opponent. This approach will try to minimize the squared error between the prediction and the result. This does cause some issues when there are large outliers. For example, Kansas City Chiefs in week 17 were favored to win by 7 points but ended up losing by 17 making it a 24 point error, 576 point error when squared in the algorithm. This will severely punish the overall number that KC is assigned. 
@@ -337,7 +367,7 @@ There are several ways to manually adjust this issue. You can either completely 
 
 
 ```{r linear}
-lm_fit <- lm(Point_Diff ~ Team + Opp + Location, data = model_data)
+lm_fit <- lm(MOV ~ Team + Opp + Location, data = model_data)
 summary(lm_fit)
 ```
 
@@ -346,9 +376,8 @@ summary(lm_fit)
 plot(lm_fit)
 ```
 
-## Power Numbers
+### Regular Season Power Numbers
 
-Our power numbers are normalized with 0 being equivalent to an "average" team. Positive numbers are better and negative numbers are bad. Looking at the results below, the Saints heading into the playoffs are the highest rated team at 9.66 meaning they would be expected to beat an average team in a neutral location by 9.66 points. The Jaguars and Jets are the worst teams both expected to lose by 11ish points to an average team at a neutral site. 
 
 Now that we have these power numbers we can give an expected point differential for any possible matchup. 
 
@@ -414,7 +443,7 @@ Again, we will be needing to update our power numbers each week through the seas
 update_ratings <- function(model_data) {
   
   # train model
-  lm_fit <- lm(Point_Diff ~ Team + Opp + Location, data = model_data)
+  lm_fit <- lm(MOV ~ Team + Opp + Location, data = model_data)
   
   # scale with average team = 0
   scale_factor <- mean(lm_fit$coefficients[2:32])
@@ -440,7 +469,7 @@ datatable(update_ratings(model_data = new_data))
 ```{r predictions}
 ## predictions
 model_data$pred_score <- predict(lm_fit, newdata = model_data)
-model_data$win <- ifelse(model_data$Point_Diff > 0, 1, 0)
+model_data$win <- ifelse(model_data$MOV > 0, 1, 0)
 # logistic regression to get win probability
 glm_pointspread <-
   glm(win ~ pred_score, data = model_data, family = "binomial")
@@ -469,25 +498,15 @@ The whole point of creating power numbers is to be able to make lines, find your
 Now it's time to pretend..Or in the sports betting world it's called backtesting... We have our power numbers using the entire regular season. Let's go through our weekly process for each round of the playoffs and see if we can make some money on the final 13 games of the season with this approach.
 
 
-### WildCard Weekend (4-1)
 
-*Super* Wild Card Weekend this year showcased 6 total games. Let's look at the teams and vegas lines.
-
-
-```{r wildcard, layout="l-page"}
-playoffs %>%
-  filter(game_type == "WC") %>% 
-  select(home_team, away_team, spread_line, total_line) %>% 
-  datatable()
-```
-
-
-
+### Bet Function
 
 Now we can put our power numbers to the test. We will use our power numbers by again creating a function. This function will take in the slate of games with our rankings and return which side we should bet along with if we won the bet or not. 
 
 
 Our Predicted Spread using our power numbers will be calulated as $Home Rating + Home Field Advantage - Away Rating$. 
+
+We need to create a function to apply our power numbers 
 
 ```{r bet-games}
 bet_games <-
@@ -531,6 +550,24 @@ bet_games <-
     return(results)
   }
 ```
+
+
+
+
+### WildCard Weekend (4-1)
+
+*Super* Wild Card Weekend this year showcased 6 total games. Let's look at the teams and vegas lines.
+
+
+```{r wildcard, layout="l-page"}
+playoffs %>%
+  filter(game_type == "WC") %>% 
+  select(home_team, away_team, spread_line, total_line) %>% 
+  datatable()
+```
+
+
+
 
 
 
@@ -661,6 +698,9 @@ all_games <- update_model_data(
 ```
 
 
+
+## Final 2020 Power Numbers 
+
 ```{r final-num}
 final_rankings <- update_ratings(model_data = all_games)
 datatable(final_rankings)
@@ -707,7 +747,7 @@ I'm sure you noticed that Kansas City is still very low on the list compared to 
 
 ```{r kc-games, layout="l-page"}
 all_games %>% 
-  mutate(Under_Perform = Point_Diff - pred_score) %>% 
+  mutate(Under_Perform = MOV - pred_score) %>% 
   filter(Under_Perform < -15) %>% 
   arrange(Under_Perform) %>% 
   datatable()
