@@ -495,7 +495,7 @@ The whole point of creating power numbers is to be able to make lines, find your
 
 ## Playoffs
 
-Now it's time to pretend..Or in the sports betting world it's called backtesting... We have our power numbers using the entire regular season. Let's go through our weekly process for each round of the playoffs and see if we can make some money on the final 13 games of the season with this approach.
+Now it's time to pretend... Or in the sports betting world it's called backtesting... We have our power numbers using the entire regular season. Let's go through our weekly process for each round of the playoffs and see if we can make some money on the final 13 games of the season with this approach.
 
 
 
@@ -540,8 +540,8 @@ bet_games <-
         spread_line,
         pred_line,
         edge,
-        Bet_Result,
         Bet,
+        Bet_Result,
         home_score,
         away_score,
         result
@@ -559,7 +559,7 @@ bet_games <-
 *Super* Wild Card Weekend this year showcased 6 total games. Let's look at the teams and vegas lines.
 
 
-```{r wildcard, layout="l-page"}
+```{r wildcard}
 playoffs %>%
   filter(game_type == "WC") %>% 
   select(home_team, away_team, spread_line, total_line) %>% 
@@ -579,9 +579,23 @@ wild_card <- playoffs %>%
             rankings = rankings,
             threshold = 0.5,
             home_edge = 1.5)
-datatable(wild_card)
 ```
 
+
+```{r wildcard-bet, echo=FALSE}
+# view a random subset of the data
+datatable(
+  slice_sample(wild_card, n = 100), 
+  extensions = 'FixedColumns',
+  options = list(
+    scrollX = TRUE
+  )
+)
+```
+
+Our system gave us recommendations to bet on 5 of the 6 games. Our biggest edge was found betting on the Steelers to beat the Browns. The Steelers started the season off so promising with 13 straight wins but fell apart at the seams down the stretch. Unfortunately for them and us, our ratings include the entire year equally and the opened this game by spotting the Browns 28 points. However, the other 4 games with more than a half point edge were perfect. The Washington Football Team may have been lucky with their backup QB playing a perfect game to keep it within the 10 point spread. The Rams easily handled the Seahawks and Ravens played tough against a hot Titans team to cover. The Colts had a few chances to win outright but they atleast covered that bet. 
+
+4-1 on Super Wild Card Weekend is a great start for our betting system.
 
 
 
@@ -759,7 +773,7 @@ all_games %>%
 
 As previously stated, this is just one of the many ways you can create NFL Power Numbers to help find an edge in the sports betting markets. There is plenty of room to adjust manually for additional factors that are not included in the model. 
 
-Outliers heavily impact the performance of this approach. Feel free to trim down the points of certain games. Or if you use the play-by-play data provided by the `{nflfastR}` package, you can filter out garage time points. 
+Outliers heavily impact the performance of this approach. Feel free to trim down the points of certain games. Or if you use the play-by-play data provided by the `{nflfastR}` package, you can filter out garage time points because there are plenty of games that the final result is much closer than the game really was. There is no perfect answer on how to account for these type of games but feel free to experiment, backtest, forward test, and start using this method to bet real games. 
 
 
 
