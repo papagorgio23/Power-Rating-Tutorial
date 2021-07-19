@@ -1,5 +1,5 @@
 # Power-Rating-Tutorial
-Tutorial showing how to create your own power ratings
+Tutorial showing how to create your own power ratings (power number) in sports.
 
 
 
