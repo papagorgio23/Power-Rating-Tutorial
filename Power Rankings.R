@@ -12,6 +12,7 @@ con <- url("https://github.com/leesharpe/nfldata/blob/master/data/games.rds?raw=
 nfl_games <- readRDS(con)
 close(con)
 
+# view data
 skimr::skim(nfl_games)
 summary(nfl_games)
 
