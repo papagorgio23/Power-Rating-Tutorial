@@ -1,4 +1,5 @@
 # Power-Rating-Tutorial (9-2-2021)
+
 Tutorial showing how to create your own power ratings (power number) in sports.
 
 
@@ -14,3 +15,5 @@ After completing this tutorial, you will know:
 - How to use NFL Power Numbers.
 
 TODO: Workflow
+
+(Computer was stolen, might delay the work)
