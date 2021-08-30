@@ -572,7 +572,7 @@ playoffs %>%
 
 
 
-```{r wildcard-bet, layout="l-page"}
+```{r wildcard-bet}
 wild_card <- playoffs %>%
   filter(game_type == "WC") %>%
   bet_games(games = .,
@@ -582,7 +582,7 @@ wild_card <- playoffs %>%
 ```
 
 
-```{r wildcard-bet, echo=FALSE}
+```{r wildcard-bet-views, echo=FALSE}
 # view a random subset of the data
 datatable(
   slice_sample(wild_card, n = 100), 
