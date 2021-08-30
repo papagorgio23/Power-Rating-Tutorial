@@ -1,0 +1,796 @@
+---
+title: "NFL Power Rankings"
+description: |
+  How to create NFL Power Rankings.
+author:
+  - name: Jason Lee
+    url: https://twitter.com/theFirmAISports
+    affiliation: A.I. Sports
+    affiliation_url: https://aisportsfirm.com/
+date: "`r Sys.Date()`"
+output:
+  distill::distill_article:
+    self_contained: false
+    toc: true
+    toc_depth: 3
+repository_url: "https://github.com/mrcaseb/open-source-football"
+categories:
+  - Sports Betting
+  - Power Numbers
+  - Rankings
+---
+
+<!-- ####################################################################### -->
+<!-- Please keep the following chunk as is at the top of your document. 
+     It will set some global chunk options.  -->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, 
+  message = FALSE, 
+  warning = FALSE, 
+  dpi = 300, 
+  tidy = 'styler'
+  )
+```
+
+<!-- ####################################################################### -->
+
+
+
+Sports betting is a passion of mine. There are so many ways to approach the it with no "right" or perfect solution. However, a very common appraoch is by using Power Numbers. While Power numbers or Power Rankings are extremely common in the sports betting community, there seems to be no consensus on how to go about creating and maintaining them week to week. This tutorial is just **one** methodology to create power rankings, which will in turn allow you to set your own NFL spread and find your edge betting games each week. 
+
+
+
+This is a great method to determine the market’s opinion on particular teams. It’s a great starting point as a sports bettor but if you are using the exact same power numbers as vegas then you will not find any value in the games each week because your numbers will be the same. Catch 22 with this approach. However, if you are making some manual adjustments for different factors, you may be able to find an edge here or there that you can bet. Granted, you may have over or under adjusted and be wrong. I’ll tell you from my personal experience that I do not use power numbers. Never have and never will. But most the guys out there have some sort of power numbers and swear by them. So without any further commentary from me about the importance of power numbers I will walk you through how to create your own power numbers.
+
+
+Power numbers are one method sports bettors use to quickly set lines for a given game. The power numbers are set somewhere between +-14 points depending on the scale. Zero will always be our “average” level team. Anything above that is X points better than an average team and any team below zero is X points worse than an average team. This is a great way to compare rank teams. For example, the Arizona Cardinals 2020 team has a power number of +3 and the Las Vegas Raiders have a power number of -1. On a neutral field the line would be $(+3) - (-1)$ = Arizona would be favored by 4 points. Teams typically play better at home, whether it is the crowd/officiating, or familiarity/no travel, or some other phenomena who knows. The NFL used to have a home edge that was roughly 3 points but that number has come down recently.
+
+For this example, we will just use a home field edge as +2. If the game were played in Arizona, the line would be Arizona -6. If the game were played in Las Vegas, the line would be Arizona -2. This method makes it extremely easy to set lines for any possible matchup.
+
+
+For each game we have the function
+
+$$(Home\ Team\ Rating) + (Home\ Edge) - (Away\ Team\ Ratings) = Predicted\ Line$$
+
+
+
+
+Let’s walk through exactly how to set these ratings using the 2020 season in R.
+
+
+
+The issue with this method is that outliers affect the overall ratings significantly. A single bad game can impact all the other ratings.
+
+
+In this tutorial, you will get to see first hand how NFL Power Numbers are used by sports bettors. You will create your own Power Numbers using the 2020 regular season and use them to predict each round of the playoffs. Each round you will update your numbers and use them to predict the next round until the Super Bowl showdown between Tom Brady and Patrick Mahomes.
+
+
+After completing this tutorial, you will know:
+
+- How to transform data into a workable format for modeling.
+- How to create functions to help workflows.
+- How to create your own NFL Power Numbers.
+- How to use NFL Power Numbers.
+
+
+## Prep Data
+
+
+The data format needed for this particular approach will be a dataframe with every single game played for each team (16 games for 32 teams = 512 total games). We will use the team, opponent, and location (Home, Road, Neutral) as inputs in the model with a dependent variable as the final margin of victory (MOV). Each individual game will be in the final dataset twice with the home team and road team occupying their own row. This is a very basic model with few inputs so it shouldn't be hard to compile.
+
+
+### Load Libraries
+
+First, we need to load the required packages for this project. We'll use the `{bettoR}` package from A.I. Sports to help us understand our edge in each game.
+
+```{r libs}
+# load libraries
+library("bettoR")
+library("DT")
+library("ggimage")
+library("nflfastR")
+library("tidyverse")
+```
+
+
+### Load Data
+
+Next, we will use the NFL games data from Lee Sharpe. He maintains a clean open source dataset for everyone to enjoy (Thank you!). We can connect to his raw file on github and use the `readRDS()` function to load it in memory.
+
+```{r load-data, cache=TRUE}
+# Connect to data
+con <-
+  url("https://github.com/leesharpe/nfldata/blob/master/data/games.rds?raw=true")
+nfl_games <- readRDS(con)
+close(con)
+```
+
+
+
+```{r nfl-games, echo=FALSE}
+# view a random subset of the data
+datatable(
+  slice_sample(nfl_games, n = 100), 
+  extensions = 'FixedColumns',
+  options = list(
+    scrollX = TRUE
+  )
+)
+```
+
+
+
+As you can see, this dataset goes back to 1999 but we are only concerned with the 2020 season. We can use the `filter()` function to trim our dataset to what we need. Personally, I'm used to looking at Vegas spreads in relation to the home team. The lines in this dataset are the road lines. So let's transform this real quick with the `mutate()` function by multiplying by -1 to give us the home_line. 
+
+```{r season}
+nfl_2020 <- nfl_games %>% 
+  filter(season == 2020) %>% 
+  mutate(home_line = spread_line * -1) 
+```
+
+
+
+```{r season-data, echo=FALSE}
+# view a random subset of the data
+datatable(
+  slice_sample(nfl_2020, n = 100), 
+  extensions = 'FixedColumns',
+  options = list(
+    scrollX = TRUE
+  )
+)
+```
+
+
+### Transform Data
+
+
+The next step requires us to transform the data in preparation for modeling. Since this dataset has 1 row per game with a home and away team, we need to rearrange things a little bit. One important note here, there is a location column that tells us whether or not the game was played on a neutral field. Even though there is a home and away team for every road, this location flag let's us know if the game was actually played at the home team's stadium. 
+
+```{r neutral}
+table(nfl_2020$location)
+```
+
+There are only 4 games that were played on a neutral field this season. We can handle this games last.
+
+
+#### Home Games
+
+We will start by getting all of the home games together. We will `filter()` to the regular season games with `game_time == "REG"` and also remove the 4 neutral games by including `location == "Home"`. It is good practice to keep the datasets as small as possible so we will only return the needed columns: game result, home team, and away team. We will rename the result column to `MOV`, `home_team` to `Team`, and `away_team` to `Opp`. Finally, we will tag all of these games with the `Location` as `Home` using the `mutate()` function again.
+
+
+
+```{r home}
+## Result is our point differential
+# organize data with team, opponent, location, result
+home <- nfl_2020 %>%
+  filter(game_type == "REG",
+         location == "Home") %>%
+  select(result, home_team, away_team) %>%
+  rename(MOV = result,
+         Team = home_team, 
+         Opp = away_team) %>% 
+  mutate(Location = "Home") 
+
+head(home)
+```
+
+#### Road Games
+
+Now we can do the same thing for the road games with some slight changes. The `away_team` becomes `Team` and `home_team` becomes the `Opp`. The `Location` changes to `Road`. Finally, the margin of victory is geared towards the home team so we need to flip it around by multiplying by -1.
+
+
+```{r road}
+road <- nfl_2020 %>%
+  filter(game_type == "REG",
+         location == "Home") %>%
+  select(result, away_team, home_team) %>%
+  rename(MOV = result,
+         Team = away_team,
+         Opp = home_team) %>% 
+  mutate(Location = "Road",
+         MOV = MOV * -1) 
+
+head(road)
+```
+
+
+#### Neutral Games
+
+Now we need to handle the four neutral site games. We will do the same thing as above to keep the dataset balanced. To get these games we change the location to NOT equal Home (`Location != "Home"`) or we can set it equal to `"Neutral"`. Either way works just fine in this situation.
+
+
+```{r neither}
+neutral1 <- nfl_2020 %>%
+  filter(game_type == "REG",
+         location == "Neutral") %>%
+  select(result, home_team, away_team) %>%
+  rename(MOV = result,
+         Team = home_team, 
+         Opp = away_team) %>% 
+  mutate(Location = "Neutral") 
+neutral2 <- nfl_2020 %>%
+  filter(game_type == "REG",
+         location == "Neutral") %>%
+  select(result, away_team, home_team) %>%
+  rename(MOV = result,
+         Team = away_team,
+         Opp = home_team) %>% 
+  mutate(Location = "Neutral",
+         MOV = MOV * -1) 
+
+head(neutral1)
+head(neutral2)
+```
+
+
+#### Model Dataset
+
+
+Finally, we will combine all of these dataframes together with the `bind_rows()` function to give us our final dataset containing 512 games, 16 games for 32 teams.
+
+ 
+```{r all-data}
+# join data
+model_data <- bind_rows(
+  home,
+  road,
+  neutral1,
+  neutral2
+)
+```
+
+
+
+
+```{r all-data-view, echo=FALSE}
+# view a random subset of the data
+datatable(
+  slice_sample(model_data, n = 100), 
+  extensions = 'FixedColumns',
+  options = list(
+    scrollX = TRUE
+  )
+)
+```
+
+
+#### Testing Dataset (Playoffs)
+
+
+While we're at it, let's save the playoff games for later when we're actually using our power numbers. 
+
+```{r playoffs}
+# We will use our Power numbers to predict the playoffs
+playoffs <- nfl_2020 %>%
+  filter(game_type != "REG")
+```
+
+
+```{r playoff-data, echo=FALSE}
+# view a random subset of the data
+datatable(
+  slice_sample(playoffs, n = 100), 
+  extensions = 'FixedColumns',
+  options = list(
+    scrollX = TRUE
+  )
+)
+```
+
+#### Transform Data Function
+
+During the actual season, there will be weekly games added to our dataset that we will need to organize in this exact same manner. Let's wrap this whole process into a single function to make our life 100x easier in the future. This function will need two inputs: first, the previous model dataset (`model_data`), second, the most recently played games (`new_games`).
+
+
+
+```{r update-data}
+## Function to update data
+update_model_data <- function(model_data, new_games) {
+  
+  # home games
+  home <- new_games %>%
+    filter(location == "Home") %>%
+    select(result, home_team, away_team) %>%
+    rename(MOV = result,
+           Team = home_team, 
+           Opp = away_team) %>% 
+    mutate(Location = "Home") 
+  
+  # road games
+  road <- new_games %>%
+    filter(location == "Home") %>%
+    select(result, home_team, away_team) %>%
+    rename(MOV = result,
+           Team = away_team,
+           Opp = home_team) %>% 
+    mutate(Location = "Road",
+           MOV = MOV * -1) 
+  
+  # neutral games
+  neutral1 <- new_games %>%
+    filter(location != "Home") %>%
+    select(result, home_team, away_team) %>%
+    rename(MOV = result,
+           Team = home_team, 
+           Opp = away_team) %>% 
+    mutate(Location = "Neutral") 
+  neutral2 <- new_games %>%
+    filter(location != "Home") %>%
+    select(result, home_team, away_team) %>%
+    rename(MOV = result,
+           Team = away_team,
+           Opp = home_team) %>% 
+    mutate(Location = "Neutral",
+           MOV = MOV * -1) 
+  
+  
+  # combine data
+  model_data <- bind_rows(
+    model_data,
+    home,
+    road,
+    neutral1,
+    neutral2
+  )
+  
+  return(model_data)
+}
+```
+
+
+Let's make sure this function works. We can use the `model_data` and our `playoffs` as the `new_games`. 
+
+```{r full-data}
+new_data <- update_model_data(
+  model_data = model_data, 
+  new_games = playoffs
+)
+
+datatable(new_data)
+```
+
+This works perfectly as we can see the playoff games are attached at the bottom.
+
+## Power Numbers
+
+
+
+### Linear Regression
+
+
+The goal of this model is to find the best power number for each team using the result of each of their games. This will take into account the location of the game and their opponent. This approach will try to minimize the squared error between the prediction and the result. This does cause some issues when there are large outliers. For example, Kansas City Chiefs in week 17 were favored to win by 7 points but ended up losing by 17 making it a 24 point error, 576 point error when squared in the algorithm. This will severely punish the overall number that KC is assigned. 
+
+There are several ways to manually adjust this issue. You can either completely remove the game from the model. It was a week 17 game that didn't matter at all to the Chiefs. Or you could go in a adjust the result by bringing it down to a 5 or 6 point loss instead. Or even give them a win. Or another way to adjust for these type of outliers is at the end. Instead of their number being a 6.8, you could bump them up a point or two in your rankings. Like I said at the beginning, Power Numbers are built and adjusted week to week in many different ways. There is plenty of room for your manual adjustments since this model is only focused on the final margin of victory and most definitely misses many other factors.
+
+
+```{r linear}
+lm_fit <- lm(MOV ~ Team + Opp + Location, data = model_data)
+summary(lm_fit)
+```
+
+
+```{r plot-lm}
+plot(lm_fit)
+```
+
+### Regular Season Power Numbers
+
+
+Now that we have these power numbers we can give an expected point differential for any possible matchup. 
+
+
+Our power numbers are normalized with 0 being equivalent to an "average" team. Positive numbers are better and negative numbers are bad. Looking at the results below, the Saints heading into the playoffs are the highest rated team at 9.66 meaning they would be expected to beat an average team in a neutral location by 9.66 points. The Jaguars and Jets are the worst teams both expected to lose by 11ish points to an average team at a neutral site. 
+
+Now that we have these power numbers we can give an expected point differential for any possible matchup. 
+
+
+There are some very important steps now. First, we need to determine a baseline scale factor for our coefficients. This will help to standardize our power numbers with zero as the baseline "average" team. We'll simply take the average of the coefficients for each team. (We use `lm_fit$coefficients[2:32]` because R handles categorical variables by dropping the first category. In this case it is the Arizona Cardinals that is missing meaning that their coefficient is 0. When we make our Ratings we put the 0 first in `c(0, lm_fit$coefficients[2:32]) - scale_factor` in order to account for the Cardinals).
+
+
+```{r rankings}
+# scale with average team = 0
+scale_factor <- mean(lm_fit$coefficients[2:32])
+## Get Team Ratings and Rank
+rankings <- data.frame("Team" = sort(unique(model_data$Team)),
+                       "Rating" = rep(NA, 32)) %>%
+  mutate(Rating = round(c(0, lm_fit$coefficients[2:32]) - scale_factor, 2),
+         Rank = rank(-Rating)) %>%
+  select(Rank, Team, Rating) %>%
+  arrange(Rank)
+datatable(rankings)
+```
+
+
+```{r plot-ranking, layout="l-page", fig.height=5}
+logos <- nflfastR::teams_colors_logos %>% 
+  select(team_abbr, team_color, team_logo_wikipedia)
+asp_ratio <- 1.618
+rankings %>%
+  left_join(logos, by = c("Team" = "team_abbr")) %>% 
+  ggplot(aes(x = Rating, y = reorder(Team, Rating))) +
+  geom_col(aes(fill = team_color, color = team_color), alpha = 0.7) +
+  geom_image(
+    aes(image = team_logo_wikipedia), 
+    size = 0.035, 
+    by = "width", 
+    asp = asp_ratio
+  ) +
+  scale_fill_identity(aesthetics = c("fill", "colour")) +
+  theme_bw() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    axis.text.y = element_blank()) +
+  geom_hline(yintercept = 0) +
+  scale_x_continuous(breaks = seq(-12, 12, 2)) +
+  labs(
+    x = "Points Better (Worse) vs. Average Team",
+    y = "",
+    title = "NFL Power Numbers",
+    subtitle = "2020 Regular Season",
+    caption = "Jason Lee  |  @theFirmAISports"
+  )
+```
+
+
+
+Again, we will be needing to update our power numbers each week through the season. Let's wrap this process into another function to make our life much easier in the future.
+
+
+```{r update-rating}
+update_ratings <- function(model_data) {
+  
+  # train model
+  lm_fit <- lm(MOV ~ Team + Opp + Location, data = model_data)
+  
+  # scale with average team = 0
+  scale_factor <- mean(lm_fit$coefficients[2:32])
+  
+  ## Get Team Ratings and Rank
+  rankings <- data.frame("Team" = sort(unique(model_data$Team)),
+                         "Rating" = rep(NA, 32)) %>%
+    mutate(Rating = round(c(0, lm_fit$coefficients[2:32]) - scale_factor, 2),
+           Rank = rank(-Rating)) %>%
+    select(Rank, Team, Rating) %>%
+    arrange(Rank)
+  
+  return(rankings)
+}
+datatable(update_ratings(model_data = new_data))
+```
+
+
+
+
+## Predictions
+
+```{r predictions}
+## predictions
+model_data$pred_score <- predict(lm_fit, newdata = model_data)
+model_data$win <- ifelse(model_data$MOV > 0, 1, 0)
+# logistic regression to get win probability
+glm_pointspread <-
+  glm(win ~ pred_score, data = model_data, family = "binomial")
+model_data$win_prob <-
+  predict(glm_pointspread, newdata = model_data, type = "response")
+## Plot results
+ggplot(data = model_data, aes(x = pred_score, y = win_prob, color = factor(win))) +
+  geom_point() +
+  scale_color_manual(values = c("red", "green")) +
+  labs(
+    title = "NFL Power Ratings",
+    subtitle = "2020-21 Season",
+    x = "Power Rating Spread",
+    y = "Win Probability",
+    color = 'Actual Result'
+  ) +
+  theme_bw()
+```
+
+
+The whole point of creating power numbers is to be able to make lines, find your edge, and bet on games. We've made ours and have functions built to update our rankings each week. We are ready to make some money!
+
+
+## Playoffs
+
+Now it's time to pretend... Or in the sports betting world it's called backtesting... We have our power numbers using the entire regular season. Let's go through our weekly process for each round of the playoffs and see if we can make some money on the final 13 games of the season with this approach.
+
+
+
+### Bet Function
+
+Now we can put our power numbers to the test. We will use our power numbers by again creating a function. This function will take in the slate of games with our rankings and return which side we should bet along with if we won the bet or not. 
+
+
+Our Predicted Spread using our power numbers will be calulated as $Home Rating + Home Field Advantage - Away Rating$. 
+
+We need to create a function to apply our power numbers 
+
+```{r bet-games}
+bet_games <-
+  function(games,
+           rankings,
+           threshold = 0.5,
+           home_edge = 1) {
+    
+    results <- games %>%
+      left_join(rankings, by = c("home_team" = "Team")) %>%
+      rename(Home_Rating = Rating) %>%
+      left_join(rankings, by = c("away_team" = "Team")) %>%
+      rename(Away_Rating = Rating) %>%
+      mutate(
+        pred_line = round(Away_Rating - Home_Rating - home_edge, 2),
+        edge = pred_line - spread_line,
+        Bet = case_when(
+          edge < -threshold ~ home_team,
+          edge > threshold ~ away_team,
+          TRUE ~ "No Bet"
+        ),
+        Bet_Result = case_when(
+          home_score - away_score + spread_line > 0 ~ home_team,
+          home_score - away_score + spread_line < 0 ~ away_team,
+          TRUE ~ "Push"
+        )
+      ) %>%
+      select(
+        home_team,
+        away_team,
+        spread_line,
+        pred_line,
+        edge,
+        Bet,
+        Bet_Result,
+        home_score,
+        away_score,
+        result
+      )
+    
+    return(results)
+  }
+```
+
+
+
+
+### WildCard Weekend (4-1)
+
+*Super* Wild Card Weekend this year showcased 6 total games. Let's look at the teams and vegas lines.
+
+
+```{r wildcard}
+playoffs %>%
+  filter(game_type == "WC") %>% 
+  select(home_team, away_team, spread_line, total_line) %>% 
+  datatable()
+```
+
+
+
+
+
+
+
+```{r wildcard-bet}
+wild_card <- playoffs %>%
+  filter(game_type == "WC") %>%
+  bet_games(games = .,
+            rankings = rankings,
+            threshold = 0.5,
+            home_edge = 1.5)
+```
+
+
+```{r wildcard-bet-views, echo=FALSE}
+# view a random subset of the data
+datatable(
+  slice_sample(wild_card, n = 100), 
+  extensions = 'FixedColumns',
+  options = list(
+    scrollX = TRUE
+  )
+)
+```
+
+Our system gave us recommendations to bet on 5 of the 6 games. Our biggest edge was found betting on the Steelers to beat the Browns. The Steelers started the season off so promising with 13 straight wins but fell apart at the seams down the stretch. Unfortunately for them and us, our ratings include the entire year equally and the opened this game by spotting the Browns 28 points. However, the other 4 games with more than a half point edge were perfect. The Washington Football Team may have been lucky with their backup QB playing a perfect game to keep it within the 10 point spread. The Rams easily handled the Seahawks and Ravens played tough against a hot Titans team to cover. The Colts had a few chances to win outright but they atleast covered that bet. 
+
+4-1 on Super Wild Card Weekend is a great start for our betting system.
+
+
+
+### Divisional Round (1-3)
+
+Now we have to update our model and rankings after the divisional games. Since we have our prebuilt functions it is really easy.
+
+```{r update-div}
+more_games <- update_model_data(
+  model_data = model_data, 
+  new_games = playoffs %>%
+    filter(game_type == "WC") 
+)
+```
+
+
+```{r update-div-num}
+new_rankings <- update_ratings(model_data = more_games)
+datatable(new_rankings)
+```
+
+
+
+```{r division, layout="l-page"}
+division <- playoffs %>%
+  filter(game_type == "DIV") %>%
+  bet_games(games = .,
+            rankings = new_rankings,
+            threshold = 0.5,
+            home_edge = 1.5)
+datatable(division)
+```
+
+
+
+### Conference Championship (1-1)
+
+Now we have to update our model and rankings after the divisional games. Since we have our prebuilt functions it is really easy.
+
+```{r update-conf}
+more_games <- update_model_data(
+  model_data = more_games, 
+  new_games = playoffs %>%
+    filter(game_type == "DIV") 
+)
+```
+
+
+```{r update-conf-num}
+new_rankings <- update_ratings(model_data = more_games)
+datatable(new_rankings)
+```
+
+
+
+```{r conf-bet, layout="l-page"}
+conf_champ <- playoffs %>%
+  filter(game_type == "CON") %>%
+  bet_games(games = .,
+            rankings = new_rankings,
+            threshold = 0.5,
+            home_edge = 0.5)
+datatable(conf_champ)
+```
+
+
+### Superbowl (1-0)
+
+
+
+Now we have to update our model and rankings after the divisional games. Since we have our prebuilt functions it is really easy.
+
+```{r update-super}
+more_games <- update_model_data(
+  model_data = more_games, 
+  new_games = playoffs %>%
+    filter(game_type == "CON") 
+)
+```
+
+
+```{r update-super-num}
+new_rankings <- update_ratings(model_data = more_games)
+datatable(new_rankings)
+```
+
+
+
+```{r super-bet, layout="l-page"}
+super <- playoffs %>%
+  filter(game_type == "SB") %>%
+  bet_games(games = .,
+            rankings = new_rankings,
+            threshold = 0.5,
+            home_edge = 0.5)
+datatable(super)
+```
+
+
+
+
+Overall this approach went 7-5 in the playoffs, which would have made you money (up 1.5 units to be exact. meaning if you bet \$100 a game you would have made \$150. If you bet \$1,000 a game then you would be up \$1,500. 1.5x your bet size)
+
+
+
+Now we have to update our model and rankings after the Super Bowl game to see our final Power Numbers for the season. 
+
+```{r final-update}
+all_games <- update_model_data(
+  model_data = more_games, 
+  new_games = playoffs %>%
+    filter(game_type == "SB") 
+)
+```
+
+
+
+## Final 2020 Power Numbers 
+
+```{r final-num}
+final_rankings <- update_ratings(model_data = all_games)
+datatable(final_rankings)
+```
+
+
+
+
+```{r final-plot, layout="l-page", fig.height=5, preview=TRUE}
+logos <- nflfastR::teams_colors_logos %>% 
+  select(team_abbr, team_color, team_logo_wikipedia)
+asp_ratio <- 1.618
+final_rankings %>%
+  left_join(logos, by = c("Team" = "team_abbr")) %>% 
+  ggplot(aes(x = Rating, y = reorder(Team, Rating))) +
+  geom_col(aes(fill = team_color, color = team_color), alpha = 0.7) +
+  geom_image(
+    aes(image = team_logo_wikipedia), 
+    size = 0.035, 
+    by = "width", 
+    asp = asp_ratio
+  ) +
+  scale_fill_identity(aesthetics = c("fill", "colour")) +
+  theme_bw() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    axis.text.y = element_blank()) +
+  geom_hline(yintercept = 0) +
+  scale_x_continuous(breaks = seq(-12, 12, 2)) +
+  labs(
+    x = "Points Better (Worse) vs. Average Team",
+    y = "",
+    title = "NFL Power Numbers",
+    subtitle = "2020 Season",
+    caption = "Jason Lee  |  @theFirmAISports"
+  )
+```
+
+
+
+
+I'm sure you noticed that Kansas City is still very low on the list compared to what everyone thought of them going into the Super Bowl. This methodology is heavily influenced by outliers. The Chiefs had 2 really bad home games where they underperformed by a substantial margin. When they faced off against the raiders on Oct. 11th, they were 11 point favorites and our model had them at only a 8.8 point favorite. However, they lost by 8 points making it a 19 and 16.8 point under performance with the spread and model, respectively. Then again on week 17 against the Chargers they were 7 point favorites and lost by 17. This game didn't matter for them. Because this game didn't matter to them it is a perfect example of the type of game that you should filter out before you train your model. If you keep it in then you'll have KC as the 6th ranked team in the NFL. 
+
+
+```{r kc-games, layout="l-page"}
+all_games %>% 
+  mutate(Under_Perform = MOV - pred_score) %>% 
+  filter(Under_Perform < -15) %>% 
+  arrange(Under_Perform) %>% 
+  datatable()
+```
+
+
+
+## Final Thoughts
+
+As previously stated, this is just one of the many ways you can create NFL Power Numbers to help find an edge in the sports betting markets. There is plenty of room to adjust manually for additional factors that are not included in the model. 
+
+Outliers heavily impact the performance of this approach. Feel free to trim down the points of certain games. Or if you use the play-by-play data provided by the `{nflfastR}` package, you can filter out garage time points because there are plenty of games that the final result is much closer than the game really was. There is no perfect answer on how to account for these type of games but feel free to experiment, backtest, forward test, and start using this method to bet real games. 
+
+
+
+<!-- ####################################################################### -->
+<!-- Place at end of document 
+     Please keep this chunk as is at end of your document. 
+     It will create a hyperlink to the source file. -->
+
+```{r gh-source, results='asis', echo=FALSE}
+'%>%' <- magrittr::`%>%`
+fld <- fs::path_wd() %>% fs::path_split() %>% purrr::pluck(1) %>% tibble::as_tibble() %>% dplyr::slice_tail(n = 1)
+fn <- fs::path_wd() %>% fs::dir_ls() %>% fs::path_filter("*.Rmd") %>% fs::path_rel()
+glue::glue('<a href="https://github.com/mrcaseb/open-source-football/blob/master/_posts/{fld}/{fn}"
+               style="font-family:Consolas;color:blue;background-color:#f8f8f8;align:right;font-size:75%;"
+              >View source code on GitHub
+           </a>'
+           )
+```
+
+<!-- ####################################################################### -->
