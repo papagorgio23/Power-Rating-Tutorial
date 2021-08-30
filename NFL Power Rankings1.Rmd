@@ -116,7 +116,7 @@ road <- nfl_2020 %>%
   mutate(Location = "Road",
          Point_Diff = Point_Diff * -1) 
 
-kable(head(road))
+datatable(road)
 ```
 
 
