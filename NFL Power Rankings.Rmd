@@ -1,7 +1,7 @@
 ---
-title: "NFL Power Rankings"
+title: "NFL Power Numbers"
 description: |
-  How to create NFL Power Rankings.
+  How to create NFL Power Numbers.
 author:
   - name: Jason Lee
     url: https://twitter.com/theFirmAISports
@@ -37,15 +37,35 @@ knitr::opts_chunk$set(
 <!-- ####################################################################### -->
 
 
+Have you ever wondered how sports betting lines are created? How did "Vegas know" that the game would be a 3 point difference?  Well... I was curious too... There's a long, complicated answer or there's the short, simplistic answer. The simple answer is they use Power Numbers. Power Numbers are typically the starting point for most sports bettors and sportsbooks. These numbers provide a very quick and easy way to create a betting line for any possible matchup between teams. 
+
+Now, there are many different versions of power numbers and ways to go about creating them. Some are based on the gut and some are strictly optimization problems. There's also many different scales used. Some people have 100 as an "average" team when others use center their numbers around zero. There's also many different ways on how people go about updating these numbers week to week. There really is no perfect or *right* answer here. But the main idea behind Power Numbers is to create some metric that after accounting for home field advantage you subtract the two teams' numbers and the result is your predicted outcome for the game (predicted line), as can be seen in the equation below.
+
+
+$$(Home\ Team\ Rating) + (Home\ Edge) - (Away\ Team\ Ratings) = Predicted\ Line$$
+
+
+:::rmdnote
+**NOTE:**  
+Home Teams typically play better at home, whether it is the crowd, officiating, or familiarity/no travel, or some other phenomena who knows. The NFL used to have a home edge that was roughly 3 points but that number has come down recently. For my details on this decline, feel free to read the great posts by @GreerreNFL and Adrian Cadena. The 2020 season saw almost no home field advantage but most sportsbooks and bettors still made slight adjustment for home teams. 
+:::
+
+
+Sports bettors use their power numbers as a baseline and update them week to week while making manual adjustments for injuries, weather, or other factors impacting the teams. They then compare their numbers to the lines provided by the sportsbooks looking for discrepancies between the two numbers. When they spot their edge, they place their bets. 
+
+
+
+I'm not saying this is the best way to do it or the only way to do it, but it is a very common approach to sports betting. 
+
+
+
+
 
 Sports betting is a passion of mine. There are so many ways to approach the it with no "right" or perfect solution. However, a very common appraoch is by using Power Numbers. While Power numbers or Power Rankings are extremely common in the sports betting community, there seems to be no consensus on how to go about creating and maintaining them week to week. This tutorial is just **one** methodology to create power rankings, which will in turn allow you to set your own NFL spread and find your edge betting games each week. 
 
 
 
-This is a great method to determine the market’s opinion on particular teams. It’s a great starting point as a sports bettor but if you are using the exact same power numbers as vegas then you will not find any value in the games each week because your numbers will be the same. Catch 22 with this approach. However, if you are making some manual adjustments for different factors, you may be able to find an edge here or there that you can bet. Granted, you may have over or under adjusted and be wrong. I’ll tell you from my personal experience that I do not use power numbers. Never have and never will. But most the guys out there have some sort of power numbers and swear by them. So without any further commentary from me about the importance of power numbers I will walk you through how to create your own power numbers.
-
-
-Power numbers are one method sports bettors use to quickly set lines for a given game. The power numbers are set somewhere between +-14 points depending on the scale. Zero will always be our “average” level team. Anything above that is X points better than an average team and any team below zero is X points worse than an average team. This is a great way to compare rank teams. For example, the Arizona Cardinals 2020 team has a power number of +3 and the Las Vegas Raiders have a power number of -1. On a neutral field the line would be $(+3) - (-1)$ = Arizona would be favored by 4 points. Teams typically play better at home, whether it is the crowd/officiating, or familiarity/no travel, or some other phenomena who knows. The NFL used to have a home edge that was roughly 3 points but that number has come down recently.
+The power numbers are set somewhere between +-14 points depending on the scale. Zero will always be our “average” level team. Anything above that is X points better than an average team and any team below zero is X points worse than an average team. This is a great way to compare rank teams. For example, the Arizona Cardinals 2020 team has a power number of +3 and the Las Vegas Raiders have a power number of -1. On a neutral field the line would be $(+3) - (-1)$ = Arizona would be favored by 4 points. Teams typically play better at home, whether it is the crowd/officiating, or familiarity/no travel, or some other phenomena who knows. The NFL used to have a home edge that was roughly 3 points but that number has come down recently.
 
 For this example, we will just use a home field edge as +2. If the game were played in Arizona, the line would be Arizona -6. If the game were played in Las Vegas, the line would be Arizona -2. This method makes it extremely easy to set lines for any possible matchup.
 
@@ -70,15 +90,22 @@ In this tutorial, you will get to see first hand how NFL Power Numbers are used 
 After completing this tutorial, you will know:
 
 - How to transform data into a workable format for modeling.
-- How to create functions to help workflows.
+- How to create functions to help automate workflows.
 - How to create your own NFL Power Numbers.
-- How to use NFL Power Numbers.
+- How to use NFL Power Numbers to find an edge in sports betting.
+
+
+This tutorial is just **one** methodology to create and maintain power numbers, which will in turn allow you to set your own NFL predicted spread and find your edge betting games each week. 
+
+
+# Introduction
+
 
 
 ## Prep Data
 
 
-The data format needed for this particular approach will be a dataframe with every single game played for each team (16 games for 32 teams = 512 total games). We will use the team, opponent, and location (Home, Road, Neutral) as inputs in the model with a dependent variable as the final margin of victory (MOV). Each individual game will be in the final dataset twice with the home team and road team occupying their own row. This is a very basic model with few inputs so it shouldn't be hard to compile.
+The data format needed for this particular approach will be a dataframe with every single game played for each team (16 games for 32 teams = 512 total games). We will use the team, opponent, and location (Home, Road, Neutral) as inputs in the model with our dependent variable being the final margin of victory (MOV). Each individual game will be in the final dataset twice with the home team and road team occupying their own row. This is a very basic model with few inputs so it shouldn't be hard to compile.
 
 
 ### Load Libraries
@@ -272,7 +299,7 @@ playoffs <- nfl_2020 %>%
 ```{r playoff-data, echo=FALSE}
 # view a random subset of the data
 datatable(
-  slice_sample(playoffs, n = 100), 
+  playoffs,
   extensions = 'FixedColumns',
   options = list(
     scrollX = TRUE
@@ -348,8 +375,7 @@ new_data <- update_model_data(
   model_data = model_data, 
   new_games = playoffs
 )
-
-datatable(new_data)
+tail(new_data)
 ```
 
 This works perfectly as we can see the playoff games are attached at the bottom.
@@ -404,7 +430,9 @@ datatable(rankings)
 ```
 
 
-```{r plot-ranking, layout="l-page", fig.height=5}
+
+
+```{r plot-ranking, layout="l-page", fig.height=5, echo=FALSE}
 logos <- nflfastR::teams_colors_logos %>% 
   select(team_abbr, team_color, team_logo_wikipedia)
 asp_ratio <- 1.618
@@ -501,12 +529,17 @@ Now it's time to pretend... Or in the sports betting world it's called backtesti
 
 ### Bet Function
 
-Now we can put our power numbers to the test. We will use our power numbers by again creating a function. This function will take in the slate of games with our rankings and return which side we should bet along with if we won the bet or not. 
+Now we can put our power numbers to the test. We will use our power numbers by again creating a function. This function will take in the slate of games with our rankings and return which side we should bet along with if we won the bet or not. I like to bet a lot of games so my threshold is lower than yours might be. Make sure to find a range that you are comfortable betting. 
 
+:::rmdnote
+**Disclaimer**, never bet with money that you can't afford to lose. 
+:::
 
-Our Predicted Spread using our power numbers will be calulated as $Home Rating + Home Field Advantage - Away Rating$. 
+Our Predicted Spread using our power numbers will be calculated as $Home Rating + Home Field Advantage - Away Rating$. 
 
 We need to create a function to apply our power numbers 
+
+
 
 ```{r bet-games}
 bet_games <-
@@ -522,22 +555,22 @@ bet_games <-
       rename(Away_Rating = Rating) %>%
       mutate(
         pred_line = round(Away_Rating - Home_Rating - home_edge, 2),
-        edge = pred_line - spread_line,
+        edge = pred_line - home_line,
         Bet = case_when(
           edge < -threshold ~ home_team,
           edge > threshold ~ away_team,
           TRUE ~ "No Bet"
         ),
         Bet_Result = case_when(
-          home_score - away_score + spread_line > 0 ~ home_team,
-          home_score - away_score + spread_line < 0 ~ away_team,
+          home_score - away_score + home_line > 0 ~ home_team,
+          home_score - away_score + home_line < 0 ~ away_team,
           TRUE ~ "Push"
         )
       ) %>%
       select(
         home_team,
         away_team,
-        spread_line,
+        home_line,
         pred_line,
         edge,
         Bet,
@@ -562,7 +595,7 @@ bet_games <-
 ```{r wildcard}
 playoffs %>%
   filter(game_type == "WC") %>% 
-  select(home_team, away_team, spread_line, total_line) %>% 
+  select(home_team, away_team, home_line, total_line) %>% 
   datatable()
 ```
 
@@ -582,10 +615,14 @@ wild_card <- playoffs %>%
 ```
 
 
+<<<<<<< HEAD
 ```{r wildcard-bet-views, echo=FALSE}
+=======
+```{r wildcard-bet-view, echo=FALSE}
+>>>>>>> 52448ec54ba68ce6b0d169cc4020de323c6d424b
 # view a random subset of the data
 datatable(
-  slice_sample(wild_card, n = 100), 
+  wild_card,
   extensions = 'FixedColumns',
   options = list(
     scrollX = TRUE
@@ -619,16 +656,26 @@ datatable(new_rankings)
 
 
 
-```{r division, layout="l-page"}
+```{r division}
 division <- playoffs %>%
   filter(game_type == "DIV") %>%
   bet_games(games = .,
             rankings = new_rankings,
             threshold = 0.5,
             home_edge = 1.5)
-datatable(division)
 ```
 
+
+```{r division-bet-view, echo=FALSE}
+# view a random subset of the data
+datatable(
+  division,
+  extensions = 'FixedColumns',
+  options = list(
+    scrollX = TRUE
+  )
+)
+```
 
 
 ### Conference Championship (1-1)
@@ -644,6 +691,8 @@ more_games <- update_model_data(
 ```
 
 
+Tampa Bay climb into first place after their upset win over the Saints. 
+
 ```{r update-conf-num}
 new_rankings <- update_ratings(model_data = more_games)
 datatable(new_rankings)
@@ -651,22 +700,32 @@ datatable(new_rankings)
 
 
 
-```{r conf-bet, layout="l-page"}
+```{r conf-bet}
 conf_champ <- playoffs %>%
   filter(game_type == "CON") %>%
   bet_games(games = .,
             rankings = new_rankings,
             threshold = 0.5,
             home_edge = 0.5)
-datatable(conf_champ)
 ```
 
+
+```{r conf-bet-view, echo=FALSE}
+# view a random subset of the data
+datatable(
+  conf_champ,
+  extensions = 'FixedColumns',
+  options = list(
+    scrollX = TRUE
+  )
+)
+```
 
 ### Superbowl (1-0)
 
 
 
-Now we have to update our model and rankings after the divisional games. Since we have our prebuilt functions it is really easy.
+Now we have to update our model and rankings again after the conference games. Since we have our prebuilt functions it is really easy.
 
 ```{r update-super}
 more_games <- update_model_data(
@@ -684,18 +743,26 @@ datatable(new_rankings)
 
 
 
-```{r super-bet, layout="l-page"}
+```{r super-bet}
 super <- playoffs %>%
   filter(game_type == "SB") %>%
   bet_games(games = .,
             rankings = new_rankings,
             threshold = 0.5,
             home_edge = 0.5)
-datatable(super)
 ```
 
 
-
+```{r super-bet-view, echo=FALSE}
+# view a random subset of the data
+datatable(
+  super,
+  extensions = 'FixedColumns',
+  options = list(
+    scrollX = TRUE
+  )
+)
+```
 
 Overall this approach went 7-5 in the playoffs, which would have made you money (up 1.5 units to be exact. meaning if you bet \$100 a game you would have made \$150. If you bet \$1,000 a game then you would be up \$1,500. 1.5x your bet size)
 
@@ -714,6 +781,8 @@ all_games <- update_model_data(
 
 
 ## Final 2020 Power Numbers 
+
+Now we can compute our final NFL Power Numbers for the 2020 season. Tampa Bay creates a little more separation after their Super Bowl victory. Kansas City remains in 6th place after their beat down. 
 
 ```{r final-num}
 final_rankings <- update_ratings(model_data = all_games)
@@ -756,10 +825,10 @@ final_rankings %>%
 
 
 
-I'm sure you noticed that Kansas City is still very low on the list compared to what everyone thought of them going into the Super Bowl. This methodology is heavily influenced by outliers. The Chiefs had 2 really bad home games where they underperformed by a substantial margin. When they faced off against the raiders on Oct. 11th, they were 11 point favorites and our model had them at only a 8.8 point favorite. However, they lost by 8 points making it a 19 and 16.8 point under performance with the spread and model, respectively. Then again on week 17 against the Chargers they were 7 point favorites and lost by 17. This game didn't matter for them. Because this game didn't matter to them it is a perfect example of the type of game that you should filter out before you train your model. If you keep it in then you'll have KC as the 6th ranked team in the NFL. 
+I'm sure you noticed that Kansas City is still very low on the list compared to what everyone thought of them going into the Super Bowl. Like I mentioned earlier, this methodology is heavily skewed when their are large outliers. The Chiefs had 2 really bad home games where they under performed by a substantial margin. When they faced off against the raiders on Oct. 11th, they were 11 point favorites but they lost by 8 points making it a 19 point under performance. Then again on week 17 against the Chargers they were 7 point favorites and lost by 17. This game didn't matter for them. Because this game didn't matter to them it is a perfect example of the type of game that you could filter out before you train your model. 
 
 
-```{r kc-games, layout="l-page"}
+```{r kc-games}
 all_games %>% 
   mutate(Under_Perform = MOV - pred_score) %>% 
   filter(Under_Perform < -15) %>% 
@@ -773,7 +842,7 @@ all_games %>%
 
 As previously stated, this is just one of the many ways you can create NFL Power Numbers to help find an edge in the sports betting markets. There is plenty of room to adjust manually for additional factors that are not included in the model. 
 
-Outliers heavily impact the performance of this approach. Feel free to trim down the points of certain games. Or if you use the play-by-play data provided by the `{nflfastR}` package, you can filter out garage time points because there are plenty of games that the final result is much closer than the game really was. There is no perfect answer on how to account for these type of games but feel free to experiment, backtest, forward test, and start using this method to bet real games. 
+Outliers heavily impact the performance of this approach. Feel free to trim down the points of certain blowout games. Or if you use the play-by-play data provided by the `{nflfastR}` package, you can filter out garage time points because there are plenty of games that the final result is much closer than the game really was. There is no perfect answer on how to account for all of these type of games but feel free to experiment, backtest, forward test, and then start using this method to bet real games. 
 
 
 
