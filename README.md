@@ -1,4 +1,4 @@
-# Power-Rating-Tutorial (9-9-2021)
+# Power-Rating-Tutorial (9-9-2021) TBD
 
 Tutorial showing how to create your own power ratings (power number) in sports.
 
